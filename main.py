@@ -269,9 +269,8 @@ while dia <= total_dias:
 html += "</table></body></html>"
 
 # SALVAR
-import os
 os.makedirs("public", exist_ok=True)
 with open("public/index.html", "w", encoding="utf-8") as f:
     f.write(html)
 
-print("✅ Calendário atualizado com nova distinção de cores.") 
+print("✅ Calendário atualizado com nova distinção de cores.")
