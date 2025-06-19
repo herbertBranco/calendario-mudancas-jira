@@ -5,7 +5,7 @@ on:
     branches: [main]
   schedule:
     - cron: '0 * * * *'  # Executa de hora em hora (UTC)
-  workflow_dispatch:
+  workflow_dispatch:     # Permite execução manual
 
 jobs:
   build:
