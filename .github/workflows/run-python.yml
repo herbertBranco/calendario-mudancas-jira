@@ -32,7 +32,7 @@ jobs:
           git config user.email "github-actions@github.com"
           git add public/index.html
           git commit -m "Atualização automática do calendário"
-          git push    
+          git push --force   
           git add main.py
           git commit -m "🔐 Usa secret para token do Jira"
           git push origin main
