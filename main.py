@@ -270,7 +270,6 @@ html += "</table></body></html>"
 
 # SALVAR
 
-os.makedirs("public", exist_ok=True)
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(html)
 
