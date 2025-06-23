@@ -1,40 +1,37 @@
-name: Run Python Script
+name: Atualizar calendário de mudanças
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '*/10 * * * *'  # Executa a cada 10 minutos
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout do repositório
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install requests
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
 
-      - name: Run script
+      - name: Rodar script Python
         env:
+          JIRA_USER_EMAIL: herbert.branco@stf.jus.br
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: python main.py
 
-      - name: Commit and push changes
+      - name: Comitar e enviar alterações
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git pull --rebase
           git add public/index.html
-          git commit -m "Atualização automática do calendário"
+          git commit -m "Atualização automática do calendário" || echo "Nada para commitar"
+          git pull --rebase
           git push
-       
-          git add main.py
-          git commit -m "🔐 Usa secret para token do Jira"
-          git push origin main
