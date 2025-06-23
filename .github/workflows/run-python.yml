@@ -30,9 +30,11 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+          git pull --rebase
           git add public/index.html
           git commit -m "Atualização automática do calendário"
-          git push --force   
+          git push
+       
           git add main.py
           git commit -m "🔐 Usa secret para token do Jira"
           git push origin main
