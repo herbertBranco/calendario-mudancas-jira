@@ -38,6 +38,7 @@ issues = response.json().get("issues", [])
 mudancas_por_data = defaultdict(list)
 for issue in issues:
     start = issue["fields"].get("customfield_10065")
+    print(f"{issue['key']} - Data de início bruta: {start}")
     if isinstance(start, dict):
         start = start.get("value")
     if start:
