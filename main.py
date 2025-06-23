@@ -273,4 +273,10 @@ html += "</table></body></html>"
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(html)
 
-print("✅ Calendário atualizado com nova distinção de cores.")
+if not JIRA_API_TOKEN:
+    print("❌ JIRA_API_TOKEN não foi carregado.")
+else:
+    print("✅ Token carregado com sucesso.")
+
+
+# print("✅ Calendário atualizado com nova distinção de cores.")
