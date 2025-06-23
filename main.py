@@ -43,8 +43,13 @@ for issue in issues:
         start = start.get("value")
     if start:
         try:
-            start_dt = datetime.fromisoformat(start).date()
-            mudancas_por_data[start_dt].append(issue)
+            from dateutil.parser import parse  # adicione no topo se ainda não tiver
+            try:
+                    start_dt = parse(start).date()
+                    mudancas_por_data[start_dt].append(issue)
+            except Exception as e:
+                print(f"❌ Erro ao interpretar data da issue {issue['key']}: {start} - {e}")
+                mudancas_por_data[start_dt].append(issue)
         except ValueError:
             continue
 
