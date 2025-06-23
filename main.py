@@ -24,6 +24,14 @@ headers = {
 # CONSULTA AO JIRA
 url = f"https://{JIRA_DOMAIN}/rest/api/3/search?jql={quote(JQL)}&fields={quote(CAMPOS)}&maxResults=100"
 response = requests.get(url, headers=headers)
+if response.status_code != 200:
+    print(f"❌ Erro na requisição: {response.status_code}")
+    print(response.text)
+    exit(1)
+else:
+    issues = response.json().get("issues", [])
+    print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
+
 issues = response.json().get("issues", [])
 
 # AGRUPAR MUDANÇAS POR DATA
