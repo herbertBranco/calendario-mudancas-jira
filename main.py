@@ -6,6 +6,7 @@ from calendar import monthrange
 from collections import defaultdict
 import locale
 import os
+from dateutil.parser import parse
 
 # CONFIGURAÇÕES
 JIRA_USER_EMAIL = "herbert.branco@stf.jus.br"
@@ -13,6 +14,13 @@ JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
 JIRA_DOMAIN = "stfjira.atlassian.net"
 JQL = 'project = 10323'
 CAMPOS = "summary,customfield_10065,customfield_10088,customfield_10057,customfield_10056,status,assignee"
+
+# VERIFICAÇÃO DO TOKEN
+if not JIRA_API_TOKEN:
+    print("❌ JIRA_API_TOKEN não foi carregado.")
+    exit(1)
+else:
+    print("✅ Token carregado com sucesso.")
 
 # AUTENTICAÇÃO
 auth = base64.b64encode(f"{JIRA_USER_EMAIL}:{JIRA_API_TOKEN}".encode()).decode()
@@ -32,8 +40,6 @@ else:
     issues = response.json().get("issues", [])
     print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
 
-issues = response.json().get("issues", [])
-
 # AGRUPAR MUDANÇAS POR DATA
 mudancas_por_data = defaultdict(list)
 for issue in issues:
@@ -43,15 +49,10 @@ for issue in issues:
         start = start.get("value")
     if start:
         try:
-            from dateutil.parser import parse  # adicione no topo se ainda não tiver
-            try:
-                    start_dt = parse(start).date()
-                    mudancas_por_data[start_dt].append(issue)
-            except Exception as e:
-                print(f"❌ Erro ao interpretar data da issue {issue['key']}: {start} - {e}")
-                mudancas_por_data[start_dt].append(issue)
-        except ValueError:
-            continue
+            start_dt = parse(start).date()
+            mudancas_por_data[start_dt].append(issue)
+        except Exception as e:
+            print(f"❌ Erro ao interpretar data da issue {issue['key']}: {start} - {e}")
 
 # DEFINIR MÊS CORRENTE
 hoje = datetime.now() - timedelta(hours=3)
@@ -75,17 +76,13 @@ def gerar_tooltip(issue):
     summary = issue["fields"].get("summary", "").replace('"', "'")
     tipo = issue["fields"].get("customfield_10088")
     tipo_valor = tipo["value"] if isinstance(tipo, dict) else "Sem tipo"
-
     motivo = issue["fields"].get("customfield_10057")
     motivo_valor = motivo["value"] if isinstance(motivo, dict) else "Sem motivo"
-
     unidade = issue["fields"].get("customfield_10056")
     unidade_pai = unidade.get("value") if isinstance(unidade, dict) else "Sem unidade"
     unidade_filho = unidade.get("child", {}).get("value") if isinstance(unidade, dict) else ""
-
     assignee = issue["fields"].get("assignee")
     responsavel = assignee.get("displayName") if assignee else "Sem responsável"
-
     status = issue["fields"].get("status", {}).get("name", "Sem status")
 
     return (
@@ -98,7 +95,7 @@ def gerar_tooltip(issue):
         f"Responsável: {responsavel}"
     )
 
-# HTML
+# HTML INICIAL
 html = f"""
 <html><head><meta charset="utf-8">
 <style>
@@ -213,6 +210,7 @@ th {{
 </tr>
 """
 
+# CALENDÁRIO
 primeiro_dia_semana, total_dias = monthrange(ano, mes)
 dia = 1
 linha = "<tr>" + "<td></td>" * primeiro_dia_semana
@@ -282,15 +280,8 @@ while dia <= total_dias:
 
 html += "</table></body></html>"
 
-# SALVAR
-
+# SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(html)
 
-if not JIRA_API_TOKEN:
-    print("❌ JIRA_API_TOKEN não foi carregado.")
-else:
-    print("✅ Token carregado com sucesso.")
-
-
-# print("✅ Calendário atualizado com nova distinção de cores.")
+print("✅ HTML salvo como index.html")
