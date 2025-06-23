@@ -2,7 +2,7 @@ name: Atualizar calendário de mudanças
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # Executa a cada 10 minutos
+    - cron: '0 0/1 * 1/1 * ? *'  # Executa a cada 1 minuto
   workflow_dispatch:
 
 jobs:
