@@ -226,4 +226,5 @@ linha = "<tr>" + "<td></td>" * primeiro_dia_semana  # Preenche os dias vazios an
 # Função que gera link JQL para listar todas as mudanças de um dia específico
 def gerar_jql_link(data):
     data_str = data.strftime("%Y-%m-%d")
-    jql_dia = f'project=10323 AND "Data e hora de início da execução" >= "{data_str}" AND "Data e hora de início da ex
+    jql_dia = f'project=10323 AND "Data e hora de início da execução" >= "{data_str}" AND "Data e hora de início da execução" < "{data_str} 23:59"'
+
