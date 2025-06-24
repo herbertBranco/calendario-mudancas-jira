@@ -12,7 +12,7 @@ from dateutil.parser import parse
 JIRA_USER_EMAIL = "herbert.branco@stf.jus.br"
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
 JIRA_DOMAIN = "stfjira.atlassian.net"
-JQL = 'project = 10323'
+JQL = 'project = 10323 and status NOT IN (Cancelado)'
 CAMPOS = "summary,customfield_10065,customfield_10088,customfield_10057,customfield_10056,status,assignee"
 
 # VERIFICAÇÃO DO TOKEN
