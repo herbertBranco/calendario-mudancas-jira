@@ -146,12 +146,13 @@ th {{
     margin: 1px 1px 1px 0;
     border-radius: 50%;
 }}
+.status-aprovacao {{ background-color: #dc2626; }}
 .status-aguardando {{ background-color: #facc15; }}
 .status-emexecucao {{ background-color: #fb923c; }}
 .status-resolvido {{ background-color: #8b5cf6; }}
 .status-avaliacao {{ background-color: #1d4ed8; }}
 .status-concluido {{ background-color:  #10b981; }}
-.status-outros {{ background-color: #ef4444; }}
+.status-outros {{ background-color: #a3a3a3; }}
 .contador {{
     font-size: 10px;
     color: #6b7280;
@@ -193,6 +194,7 @@ th {{
 </head><body>
 <div class='legenda-status'>
     <strong>Legenda de status:</strong><br>
+    <span class='item-bar status-aprovacao'></span> Em aprovação<br>
     <span class='item-bar status-aguardando'></span> Aguardando execução<br>
     <span class='item-bar status-emexecucao'></span> Em execução<br>
     <span class='item-bar status-resolvido'></span> Resolvido<br>
@@ -222,7 +224,9 @@ def gerar_jql_link(data):
 
 def cor_status(status):
     status = status.lower()
-    if "aguardando" in status:
+    if "aprovação" in status:
+        return "status-aprovacao"
+    elif "aguardando" in status:
         return "status-aguardando"
     elif "execução" in status:
         return "status-emexecucao"
