@@ -98,6 +98,7 @@ def gerar_tooltip(issue):
 # HTML INICIAL
 html = f"""
 <html><head><meta charset="utf-8">
+<title>Calendário de Mudanças</title>
 <style>
 body {{
     font-family: 'Segoe UI', sans-serif;
@@ -213,76 +214,40 @@ th {{
 """
 
 # CALENDÁRIO
-primeiro_dia_semana, total_dias = monthrange(ano, mes)
-dia = 1
-linha = "<tr>" + "<td></td>" * primeiro_dia_semana
-
-def gerar_jql_link(data):
-    data_str = data.strftime("%Y-%m-%d")
-    jql_dia = f'project=10323 AND "Data e hora de início da execução" >= "{data_str}" AND "Data e hora de início da execução" < "{data_str} 23:59"'
-    return f"https://{JIRA_DOMAIN}/issues/?jql={quote(jql_dia)}"
-
-def cor_status(status):
-    status = status.lower()
-    if "aprovação" in status:
-        return "status-aprovacao"
-    elif "aguardando" in status:
-        return "status-aguardando"
-    elif "execução" in status:
-        return "status-emexecucao"
-    elif "resolvido" in status:
-        return "status-resolvido"
-    elif "avaliação" in status:
-        return "status-avaliacao"
-    elif "concluído" in status or "concluido" in status:
-        return "status-concluido"
-    else:
-        return "status-outros"
-
-for i in range(primeiro_dia_semana, 7):
-    data_atual = datetime(ano, mes, dia).date()
-    itens = mudancas_por_data.get(data_atual, [])
-    linha += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
-    for item in itens:
-        key = item["key"]
-        status_nome = item["fields"].get("status", {}).get("name", "")
-        cor = cor_status(status_nome)
-        link = f"https://{JIRA_DOMAIN}/browse/{key}"
-        tooltip = gerar_tooltip(item)
-        linha += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
-    linha += "</div>"
-    if itens:
-        jql_link = gerar_jql_link(data_atual)
-        linha += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
-    linha += "</td>"
-    dia += 1
-html += linha + "</tr>\n"
-
-while dia <= total_dias:
-    linha = "<tr>"
-    for _ in range(7):
-        if dia > total_dias:
-            linha += "<td></td>"
+cal = Calendar(firstweekday=0)
+for semana in cal.monthdayscalendar(ano, mes):
+    html += "<tr>"
+    for dia in semana:
+        if dia == 0:
+            html += "<td></td>"
         else:
             data_atual = datetime(ano, mes, dia).date()
             itens = mudancas_por_data.get(data_atual, [])
-            linha += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
+            html += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
             for item in itens:
                 key = item["key"]
                 status_nome = item["fields"].get("status", {}).get("name", "")
                 cor = cor_status(status_nome)
                 link = f"https://{JIRA_DOMAIN}/browse/{key}"
                 tooltip = gerar_tooltip(item)
-                linha += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
-            linha += "</div>"
+                html += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
+            html += "</div>"
             if itens:
                 jql_link = gerar_jql_link(data_atual)
-                linha += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
-            linha += "</td>"
-        dia += 1
-    html += linha + "</tr>\n"
+                html += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
+            html += "</td>"
+    html += "</tr>\n"
 
-html += "</table></body></html>"
+html += """
+</table>
+
+<!-- Rodapé com informações do responsável -->
+<div style="text-align: center; font-size: 12px; color: #718096; margin-top: 24px; padding-bottom: 16px;">
+    Calendário mantido pela Gerência de Gestão de Mudanças e Implantações da Secretaria de Tecnologia e Inovação - GMUDI/STI.
+</div>
+
+</body></html>
+"""
 
 # SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
