@@ -211,6 +211,7 @@ th {{
 <div class='mes-header'>
     <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
     <div class='atualizacao'>Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
+    <div class='rodape'>Mantido pela Gerência de Gestão de Mudanças e Implantações da Secretaria de Tecnologia e Inovação - GMUDI/STI.</div>
 </div>
 <table>
 <tr>
@@ -289,7 +290,7 @@ while dia <= total_dias:
         dia += 1
     html += linha + "</tr>\n"
 
-html += "</table><div class='rodape'>Sistema automatizado de visualização de mudanças – STI</div></body></html>"
+html += "</table></body></html>"
 
 # SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
