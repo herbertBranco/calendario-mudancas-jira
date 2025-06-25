@@ -84,7 +84,6 @@ def gerar_tooltip(issue):
     assignee = issue["fields"].get("assignee")
     responsavel = assignee.get("displayName") if assignee else "Sem responsável"
     status = issue["fields"].get("status", {}).get("name", "Sem status")
-
     return (
         f"{key}\n"
         f"Tipo: {tipo_valor}\n"
@@ -179,7 +178,7 @@ th {{
 }}
 .legenda-status {{
     position: fixed;
-    top: 16px;
+    top: 72px;
     left: 16px;
     background: rgba(255, 255, 255, 0.95);
     padding: 10px 12px;
@@ -191,10 +190,16 @@ th {{
     max-width: 200px;
     line-height: 1.5;
 }}
+.rodape {{
+    margin: 30px auto;
+    text-align: center;
+    font-size: 12px;
+    color: #6b7280;
+}}
 </style>
 </head><body>
 <div class='legenda-status'>
-    <strong>Legenda de status:</strong><br>
+    <strong>Status das Mudanças:</strong><br>
     <span class='item-bar status-aprovacao'></span> Em aprovação<br>
     <span class='item-bar status-aguardando'></span> Aguardando execução<br>
     <span class='item-bar status-emexecucao'></span> Em execução<br>
@@ -204,50 +209,87 @@ th {{
     <span class='item-bar status-outros'></span> Outros status
 </div>
 <div class='mes-header'>
-    <h2>{nome_mes} {ano}</h2>
+    <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
     <div class='atualizacao'>Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
 </div>
 <table>
 <tr>
-<th>Dom</th><th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th>
+<th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
 </tr>
 """
 
 # CALENDÁRIO
-cal = Calendar(firstweekday=0)
-for semana in cal.monthdayscalendar(ano, mes):
-    html += "<tr>"
-    for dia in semana:
-        if dia == 0:
-            html += "<td></td>"
+primeiro_dia_semana, total_dias = monthrange(ano, mes)
+primeira_semana_vazia = (primeiro_dia_semana - 0) % 7
+dia = 1
+linha = "<tr>" + "<td></td>" * primeira_semana_vazia
+
+def gerar_jql_link(data):
+    data_str = data.strftime("%Y-%m-%d")
+    jql_dia = f'project=10323 AND "Data e hora de início da execução" >= "{data_str}" AND "Data e hora de início da execução" < "{data_str} 23:59"'
+    return f"https://{JIRA_DOMAIN}/issues/?jql={quote(jql_dia)}"
+
+def cor_status(status):
+    status = status.lower()
+    if "aprovação" in status:
+        return "status-aprovacao"
+    elif "aguardando" in status:
+        return "status-aguardando"
+    elif "execução" in status:
+        return "status-emexecucao"
+    elif "resolvido" in status:
+        return "status-resolvido"
+    elif "avaliação" in status:
+        return "status-avaliacao"
+    elif "concluído" in status or "concluido" in status:
+        return "status-concluido"
+    else:
+        return "status-outros"
+
+for i in range(primeira_semana_vazia, 7):
+    data_atual = datetime(ano, mes, dia).date()
+    itens = mudancas_por_data.get(data_atual, [])
+    linha += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
+    for item in itens:
+        key = item["key"]
+        status_nome = item["fields"].get("status", {}).get("name", "")
+        cor = cor_status(status_nome)
+        link = f"https://{JIRA_DOMAIN}/browse/{key}"
+        tooltip = gerar_tooltip(item)
+        linha += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
+    linha += "</div>"
+    if itens:
+        jql_link = gerar_jql_link(data_atual)
+        linha += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
+    linha += "</td>"
+    dia += 1
+html += linha + "</tr>\n"
+
+while dia <= total_dias:
+    linha = "<tr>"
+    for _ in range(7):
+        if dia > total_dias:
+            linha += "<td></td>"
         else:
             data_atual = datetime(ano, mes, dia).date()
             itens = mudancas_por_data.get(data_atual, [])
-            html += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
+            linha += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
             for item in itens:
                 key = item["key"]
                 status_nome = item["fields"].get("status", {}).get("name", "")
                 cor = cor_status(status_nome)
                 link = f"https://{JIRA_DOMAIN}/browse/{key}"
                 tooltip = gerar_tooltip(item)
-                html += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
-            html += "</div>"
+                linha += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
+            linha += "</div>"
             if itens:
                 jql_link = gerar_jql_link(data_atual)
-                html += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
-            html += "</td>"
-    html += "</tr>\n"
+                linha += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
+            linha += "</td>"
+        dia += 1
+    html += linha + "</tr>\n"
 
-html += """
-</table>
-
-<!-- Rodapé com informações do responsável -->
-<div style="text-align: center; font-size: 12px; color: #718096; margin-top: 24px; padding-bottom: 16px;">
-    Calendário mantido pela Gerência de Gestão de Mudanças e Implantações da Secretaria de Tecnologia e Inovação - GMUDI/STI.
-</div>
-
-</body></html>
-"""
+html += "</table><div class='rodape'>Sistema automatizado de visualização de mudanças – STI</div></body></html>"
 
 # SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
