@@ -92,6 +92,12 @@ except:
     }
     nome_mes = meses_pt[mes]
 
+# Calcular total de mudanças do mês atual
+total_mudancas_mes = 0
+for data_key in mudancas_por_data.keys():
+    if data_key.year == ano and data_key.month == mes:
+        total_mudancas_mes += len(mudancas_por_data[data_key])
+
 # TOOLTIP
 def gerar_tooltip(issue):
     key = issue["key"]
@@ -116,8 +122,9 @@ def gerar_tooltip(issue):
         f"Responsável: {responsavel}"
     )
 
-# HTML INICIAL
-html = f"""<html><head><meta charset="utf-8">
+# HTML INICIAL - modificado para incluir total e última atualização lado a lado no topo
+html = f"""
+<html><head><meta charset="utf-8">
 <title>Calendário de Mudanças</title>
 <style>
 body {{
@@ -182,20 +189,21 @@ th {{
 }}
 .mes-header {{
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     margin: 16px 0 8px 0;
     color: #1f2937;
+    max-width: 860px;
+    margin-left: 200px;
 }}
 .mes-header h2 {{
     font-size: 20px;
     margin: 0;
 }}
-.atualizacao {{
+.mes-info {{
     font-size: 12px;
     color: #6b7280;
-    margin-top: 4px;
+    text-align: right;
 }}
 .legenda-status {{
     position: fixed;
@@ -231,7 +239,10 @@ th {{
 </div>
 <div class='mes-header'>
     <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
-    <div class='atualizacao'>Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
+    <div class='mes-info'>
+        Total de mudanças: <strong>{total_mudancas_mes}</strong><br>
+        Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}
+    </div>
 </div>
 <table>
 <tr>
