@@ -207,7 +207,7 @@ th {{
 }}
 .legenda-status {{
     position: fixed;
-    top: 100px;
+    top: 55px;
     left: 16px;
     background: rgba(255, 255, 255, 0.95);
     padding: 10px 12px;
