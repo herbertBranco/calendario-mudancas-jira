@@ -32,31 +32,35 @@ headers = {
 # CONSULTA AO JIRA COM PAGINAÇÃO
 issues = []
 start_at = 0
+max_results = 100
+
+print("⏳ Buscando mudanças no Jira...")
+
 while True:
-    url = f"https://{JIRA_DOMAIN}/rest/api/3/search"
-    params = {
-        "jql": JQL,
-        "fields": CAMPOS,
-        "startAt": start_at,
-        "maxResults": 100
-    }
-    response = requests.get(url, headers=headers, params=params)
+    url = (
+        f"https://{JIRA_DOMAIN}/rest/api/3/search"
+        f"?jql={quote(JQL)}"
+        f"&fields={quote(CAMPOS)}"
+        f"&startAt={start_at}"
+        f"&maxResults={max_results}"
+    )
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print(f"❌ Erro na requisição: {response.status_code}")
+        print(response.text)
+        exit(1)
+
     data = response.json()
+    page_issues = data.get("issues", [])
+    issues.extend(page_issues)
 
-    batch = data.get("issues", [])
-    issues.extend(batch)
+    print(f"📄 Página com {len(page_issues)} mudanças carregadas (startAt={start_at})")
 
-    if len(batch) < 100:
+    if len(page_issues) < max_results:
         break  # Última página
-    start_at += 100
+    start_at += max_results
 
-if response.status_code != 200:
-    print(f"❌ Erro na requisição: {response.status_code}")
-    print(response.text)
-    exit(1)
-else:
-    issues = response.json().get("issues", [])
-    print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
+print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
 
 # AGRUPAR MUDANÇAS POR DATA
 mudancas_por_data = defaultdict(list)
