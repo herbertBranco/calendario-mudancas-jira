@@ -1,160 +1,190 @@
 import requests
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import quote
-from calendar import Calendar
+from calendar import monthrange, Calendar
 from collections import defaultdict
 import locale
-import os
-from dateutil.parser import parse
 
 # CONFIGURAÇÕES
-JIRA_USER_EMAIL = "herbert.branco@stf.jus.br"
-JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
-JIRA_DOMAIN = "stfjira.atlassian.net"
-JQL = 'project = 10323 and status NOT IN (Cancelado)'
-CAMPOS = "summary,customfield_10065,customfield_10088,customfield_10057,customfield_10056,status,assignee"
+JIRA_USER_EMAIL = "SEU_EMAIL@exemplo.com"
+JIRA_API_TOKEN = "SEU_TOKEN"
+JIRA_URL = "https://SEU_DOMINIO.atlassian.net"
+PROJETO = "10323"
+locale.setlocale(locale.LC_TIME, "pt_BR.UTF-8")
 
-# VERIFICAÇÃO DO TOKEN
-if not JIRA_API_TOKEN:
-    print("❌ JIRA_API_TOKEN não foi carregado.")
-    exit(1)
-else:
-    print("✅ Token carregado com sucesso.")
+# MÊS E ANO ATUAL
+hoje = datetime.now()
+ano = hoje.year
+mes = hoje.month
+nome_mes = hoje.strftime('%B').capitalize()
 
-# AUTENTICAÇÃO
+# INTERVALO DO MÊS
+data_inicio = f"{ano}-{mes:02d}-01"
+_, ultimo_dia = monthrange(ano, mes)
+data_fim = f"{ano}-{mes:02d}-{ultimo_dia}"
+
+# JQL
+campo_data = "Data e hora de início da execução"
+jql = f'project={PROJETO} AND "{campo_data}" >= "{data_inicio}" AND "{campo_data}" <= "{data_fim}" ORDER BY "{campo_data}" ASC'
+
+# HEADERS
 auth = base64.b64encode(f"{JIRA_USER_EMAIL}:{JIRA_API_TOKEN}".encode()).decode()
 headers = {
     "Authorization": f"Basic {auth}",
-    "Accept": "application/json"
+    "Content-Type": "application/json"
 }
 
-# CONSULTA AO JIRA COM PAGINAÇÃO
+# CAMPOS PERSONALIZADOS (ajuste conforme necessário)
+custom_fields = {
+    "tipo": "customfield_10088",
+    "unidade": "customfield_10056"
+}
+
+# CONSULTA PAGINADA
 issues = []
 start_at = 0
 max_results = 100
 
-print("⏳ Buscando mudanças no Jira...")
-
 while True:
-    url = (
-        f"https://{JIRA_DOMAIN}/rest/api/3/search"
-        f"?jql={quote(JQL)}"
-        f"&fields={quote(CAMPOS)}"
-        f"&startAt={start_at}"
-        f"&maxResults={max_results}"
-    )
+    url = f"{JIRA_URL}/rest/api/3/search?jql={quote(jql)}&startAt={start_at}&maxResults={max_results}"
     response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"❌ Erro na requisição: {response.status_code}")
-        print(response.text)
-        exit(1)
-
     data = response.json()
-    page_issues = data.get("issues", [])
-    issues.extend(page_issues)
-
-    print(f"📄 Página com {len(page_issues)} mudanças carregadas (startAt={start_at})")
-
-    if len(page_issues) < max_results:
-        break  # Última página
+    issues.extend(data["issues"])
+    if start_at + max_results >= data["total"]:
+        break
     start_at += max_results
 
-print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
+# AGRUPAMENTO POR DIA
+calendario = defaultdict(list)
 
-# AGRUPAR MUDANÇAS POR DATA
-mudancas_por_data = defaultdict(list)
 for issue in issues:
-    start = issue["fields"].get("customfield_10065")
-    if isinstance(start, dict):
-        start = start.get("value")
-    if start:
-        try:
-            start_dt = parse(start).date()
-            mudancas_por_data[start_dt].append(issue)
-        except Exception as e:
-            print(f"❌ Erro ao interpretar data da issue {issue['key']}: {start} - {e}")
+    campos = issue["fields"]
+    data_inicio_exec = campos.get(campo_data.replace(" ", "_").lower())
+    if data_inicio_exec:
+        data_obj = datetime.strptime(data_inicio_exec[:10], "%Y-%m-%d")
+        status = campos["status"]["name"]
+        chave = issue["key"]
+        resumo = campos["summary"]
+        tipo = campos.get(custom_fields["tipo"], {}).get("value", "")
+        unidade = campos.get(custom_fields["unidade"], {}).get("value", "")
+        url_chave = f"{JIRA_URL}/browse/{chave}"
+        calendario[data_obj.day].append({
+            "status": status,
+            "chave": chave,
+            "resumo": resumo,
+            "tipo": tipo,
+            "unidade": unidade,
+            "url": url_chave
+        })
 
-# DEFINIR MÊS CORRENTE
-hoje = datetime.now() - timedelta(hours=3)
-ano = hoje.year
-mes = hoje.month
-
-# Nome do mês em português
-try:
-    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-    nome_mes = datetime(ano, mes, 1).strftime("%B").capitalize()
-except:
-    meses_pt = {
-        1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
-        7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
-    }
-    nome_mes = meses_pt[mes]
-
-def gerar_tooltip(issue):
-    key = issue["key"]
-    summary = issue["fields"].get("summary", "").replace('"', "'")
-    tipo = issue["fields"].get("customfield_10088")
-    tipo_valor = tipo["value"] if isinstance(tipo, dict) else "Sem tipo"
-    motivo = issue["fields"].get("customfield_10057")
-    motivo_valor = motivo["value"] if isinstance(motivo, dict) else "Sem motivo"
-    unidade = issue["fields"].get("customfield_10056")
-    unidade_pai = unidade.get("value") if isinstance(unidade, dict) else "Sem unidade"
-    unidade_filho = unidade.get("child", {}).get("value") if isinstance(unidade, dict) else ""
-    assignee = issue["fields"].get("assignee")
-    responsavel = assignee.get("displayName") if assignee else "Sem responsável"
-    status = issue["fields"].get("status", {}).get("name", "Sem status")
-    return (
-        f"{key}\n"
-        f"Tipo: {tipo_valor}\n"
-        f"Status: {status}\n"
-        f"Resumo: {summary}\n"
-        f"Motivo: {motivo_valor}\n"
-        f"Unidade executora: {unidade_pai} / {unidade_filho}\n"
-        f"Responsável: {responsavel}"
-    )
-
-def cor_status(status):
-    status = status.lower()
-    if "aprova" in status:
-        return "aprovacao"
-    elif "aguard" in status:
-        return "aguardando"
-    elif "execu" in status:
-        return "emexecucao"
-    elif "resolv" in status:
-        return "resolvido"
-    elif "avalia" in status:
-        return "avaliacao"
-    elif "conclu" in status:
-        return "concluido"
-    else:
-        return "outros"
-
+# HTML
 html = f"""
-<html><head><meta charset='utf-8'>
+<html><head><meta charset="utf-8">
 <title>Calendário de Mudanças</title>
 <style>
-body {{ font-family: 'Segoe UI', sans-serif; font-size: 14px; background: #f9fafb; margin: 0; }}
-table {{ border-collapse: collapse; width: 94%; max-width: 860px; margin: auto; margin-left: 200px; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }}
-th, td {{ border: 1px solid #e5e7eb; width: 14.2%; height: 80px; vertical-align: top; padding: 4px; font-size: 13px; position: relative; }}
-th {{ background: #f3f4f6; color: #374151; height: 30px; }}
-.data-dia {{ font-size: 12px; font-weight: bold; color: #111827; margin-bottom: 4px; }}
-.item-container {{ margin-top: 18px; }}
-.item-bar {{ width: 10px; height: 10px; display: inline-block; margin: 1px 1px 1px 0; border-radius: 50%; }}
+body {{
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    background-color: #f9fafb;
+    margin: 0;
+    padding: 0;
+}}
+table {{
+    border-collapse: collapse;
+    width: 94%;
+    max-width: 860px;
+    margin: auto;
+    margin-left: 200px;
+    background-color: white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}}
+td, th {{
+    border: 1px solid #e5e7eb;
+    width: 14.2%;
+    height: 80px;
+    vertical-align: top;
+    padding: 4px;
+    font-size: 13px;
+    position: relative;
+}}
+th {{
+    background-color: #f3f4f6;
+    color: #374151;
+    font-size: 13px;
+    height: 30px;
+}}
+.data-dia {{
+    font-size: 12px;
+    font-weight: bold;
+    color: #111827;
+    margin-bottom: 4px;
+}}
+.item-container {{
+    margin-top: 18px;
+}}
+.item-bar {{
+    width: 10px;
+    height: 10px;
+    display: inline-block;
+    margin: 1px 1px 1px 0;
+    border-radius: 50%;
+}}
 .status-aprovacao {{ background-color: #dc2626; }}
 .status-aguardando {{ background-color: #facc15; }}
 .status-emexecucao {{ background-color: #fb923c; }}
 .status-resolvido {{ background-color: #8b5cf6; }}
 .status-avaliacao {{ background-color: #1d4ed8; }}
-.status-concluido {{ background-color: #10b981; }}
+.status-concluido {{ background-color:  #10b981; }}
 .status-outros {{ background-color: #a3a3a3; }}
-.contador {{ font-size: 10px; color: #6b7280; margin-top: 4px; text-align: right; }}
-.mes-header {{ display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 16px 0 8px 0; color: #1f2937; }}
-.mes-header h2 {{ font-size: 20px; margin: 0; }}
-.atualizacao {{ font-size: 12px; color: #6b7280; margin-top: 4px; }}
-.legenda-status {{ position: fixed; top: 72px; left: 16px; background: rgba(255, 255, 255, 0.95); padding: 10px 12px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); font-size: 12px; color: #1f2937; z-index: 1000; max-width: 200px; line-height: 1.5; }}
-.rodape {{ margin: 30px auto; text-align: center; font-size: 12px; color: #6b7280; }}
+.contador {{
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 4px;
+    text-align: right;
+}}
+.mes-header {{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 16px 0 8px 0;
+    color: #1f2937;
+}}
+.mes-header h2 {{
+    font-size: 20px;
+    margin: 0;
+}}
+.atualizacao-wrapper {{
+    width: 94%;
+    max-width: 860px;
+    margin: auto;
+    display: flex;
+    justify-content: space-between;
+    color: #6b7280;
+    font-size: 12px;
+    margin-bottom: 4px;
+}}
+.legenda-status {{
+    position: fixed;
+    top: 72px;
+    left: 16px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 10px 12px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    font-size: 12px;
+    color: #1f2937;
+    z-index: 1000;
+    max-width: 200px;
+    line-height: 1.5;
+}}
+.rodape {{
+    margin: 30px auto;
+    text-align: center;
+    font-size: 12px;
+    color: #6b7280;
+}}
 </style>
 </head><body>
 <div class='legenda-status'>
@@ -169,34 +199,57 @@ th {{ background: #f3f4f6; color: #374151; height: 30px; }}
 </div>
 <div class='mes-header'>
     <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
-    <div class='atualizacao'>Total de mudanças: {len(issues)} | Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
+</div>
+<div class='atualizacao-wrapper'>
+    <div>Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
+    <div>Total de mudanças no mês: {len(issues)}</div>
 </div>
 <table>
-<tr><th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th></tr>
+<tr>
+<th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
+</tr>
 """
 
 # CALENDÁRIO
 cal = Calendar(firstweekday=0)
-semanas = cal.monthdatescalendar(ano, mes)
+semanas = cal.monthdayscalendar(ano, mes)
+
 for semana in semanas:
     html += "<tr>"
     for dia in semana:
-        if dia.month == mes:
-            eventos = mudancas_por_data.get(dia, [])
-            html += f"<td><div class='data-dia'>{dia.day}</div><div class='item-container'>"
-            for evento in eventos:
-                status = evento["fields"].get("status", {}).get("name", "")
-                cor = cor_status(status)
-                tooltip = gerar_tooltip(evento).replace("\n", "&#10;")
-                html += f"<a href='https://{JIRA_DOMAIN}/browse/{evento['key']}' target='_blank' title='{tooltip}'><div class='item-bar status-{cor}'></div></a>"
-            if eventos:
-                html += f"<div class='contador'>{len(eventos)} mudança(s)</div>"
-            html += "</div></td>"
+        if dia == 0:
+            html += "<td></td>"
         else:
-            html += "<td style='background-color:#f3f4f6;'></td>"
+            items = calendario[dia]
+            html += f"<td><div class='data-dia'>{dia}</div>"
+            for item in items:
+                status = item["status"].lower().replace(" ", "")
+                if "aprova" in status:
+                    cor = "status-aprovacao"
+                elif "aguardando" in status:
+                    cor = "status-aguardando"
+                elif "execuç" in status or "emexecucao" in status:
+                    cor = "status-emexecucao"
+                elif "resolvido" in status:
+                    cor = "status-resolvido"
+                elif "avalia" in status:
+                    cor = "status-avaliacao"
+                elif "conclu" in status:
+                    cor = "status-concluido"
+                else:
+                    cor = "status-outros"
+                html += f"<a href='{item['url']}' title='{item['chave']} - {item['resumo']}' target='_blank'><span class='item-bar {cor}'></span></a>"
+            if items:
+                html += f"<div class='contador'>{len(items)} mudança(s)</div>"
+            html += "</td>"
     html += "</tr>"
 
-html += "</table><div class='rodape'>Mantido pela Gerência de Gestão de Mudanças e Implantações da STI.</div></body></html>"
+# RODAPÉ
+html += """
+</table>
+<div class='rodape'>Desenvolvido por Herbert HBT - Versão 2.0</div>
+</body></html>
+"""
 
 # SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
