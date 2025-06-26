@@ -29,9 +29,27 @@ headers = {
     "Accept": "application/json"
 }
 
-# CONSULTA AO JIRA
-url = f"https://{JIRA_DOMAIN}/rest/api/3/search?jql={quote(JQL)}&fields={quote(CAMPOS)}&maxResults=100"
-response = requests.get(url, headers=headers)
+# CONSULTA AO JIRA COM PAGINAÇÃO
+issues = []
+start_at = 0
+while True:
+    url = f"https://{JIRA_DOMAIN}/rest/api/3/search"
+    params = {
+        "jql": JQL,
+        "fields": CAMPOS,
+        "startAt": start_at,
+        "maxResults": 100
+    }
+    response = requests.get(url, headers=headers, params=params)
+    data = response.json()
+
+    batch = data.get("issues", [])
+    issues.extend(batch)
+
+    if len(batch) < 100:
+        break  # Última página
+    start_at += 100
+
 if response.status_code != 200:
     print(f"❌ Erro na requisição: {response.status_code}")
     print(response.text)
