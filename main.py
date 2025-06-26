@@ -2,7 +2,7 @@ import requests
 import base64
 from datetime import datetime, timedelta
 from urllib.parse import quote
-from calendar import monthrange
+from calendar import Calendar
 from collections import defaultdict
 import locale
 import os
@@ -66,7 +66,6 @@ print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
 mudancas_por_data = defaultdict(list)
 for issue in issues:
     start = issue["fields"].get("customfield_10065")
-    print(f"{issue['key']} - Data de início bruta: {start}")
     if isinstance(start, dict):
         start = start.get("value")
     if start:
@@ -92,15 +91,6 @@ except:
     }
     nome_mes = meses_pt[mes]
 
-# Filtrar mudanças do mês atual
-mudancas_mes = [
-    i for d, lst in mudancas_por_data.items()
-    if d.month == mes and d.year == ano
-    for i in lst
-]
-total_mes = len(mudancas_mes)
-
-# TOOLTIP
 def gerar_tooltip(issue):
     key = issue["key"]
     summary = issue["fields"].get("summary", "").replace('"', "'")
@@ -124,112 +114,47 @@ def gerar_tooltip(issue):
         f"Responsável: {responsavel}"
     )
 
-# HTML INICIAL
+def cor_status(status):
+    status = status.lower()
+    if "aprova" in status:
+        return "aprovacao"
+    elif "aguard" in status:
+        return "aguardando"
+    elif "execu" in status:
+        return "emexecucao"
+    elif "resolv" in status:
+        return "resolvido"
+    elif "avalia" in status:
+        return "avaliacao"
+    elif "conclu" in status:
+        return "concluido"
+    else:
+        return "outros"
+
 html = f"""
-<html><head><meta charset="utf-8">
+<html><head><meta charset='utf-8'>
 <title>Calendário de Mudanças</title>
 <style>
-body {{
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    background-color: #f9fafb;
-    margin: 0;
-    padding: 0;
-}}
-table {{
-    border-collapse: collapse;
-    width: 94%;
-    max-width: 860px;
-    margin: auto;
-    margin-left: 200px;
-    background-color: white;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}}
-td, th {{
-    border: 1px solid #e5e7eb;
-    width: 14.2%;
-    height: 80px;
-    vertical-align: top;
-    padding: 4px;
-    font-size: 13px;
-    position: relative;
-}}
-th {{
-    background-color: #f3f4f6;
-    color: #374151;
-    font-size: 13px;
-    height: 30px;
-}}
-.data-dia {{
-    font-size: 12px;
-    font-weight: bold;
-    color: #111827;
-    margin-bottom: 4px;
-}}
-.item-container {{
-    margin-top: 18px;
-}}
-.item-bar {{
-    width: 10px;
-    height: 10px;
-    display: inline-block;
-    margin: 1px 1px 1px 0;
-    border-radius: 50%;
-}}
+body {{ font-family: 'Segoe UI', sans-serif; font-size: 14px; background: #f9fafb; margin: 0; }}
+table {{ border-collapse: collapse; width: 94%; max-width: 860px; margin: auto; margin-left: 200px; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }}
+th, td {{ border: 1px solid #e5e7eb; width: 14.2%; height: 80px; vertical-align: top; padding: 4px; font-size: 13px; position: relative; }}
+th {{ background: #f3f4f6; color: #374151; height: 30px; }}
+.data-dia {{ font-size: 12px; font-weight: bold; color: #111827; margin-bottom: 4px; }}
+.item-container {{ margin-top: 18px; }}
+.item-bar {{ width: 10px; height: 10px; display: inline-block; margin: 1px 1px 1px 0; border-radius: 50%; }}
 .status-aprovacao {{ background-color: #dc2626; }}
 .status-aguardando {{ background-color: #facc15; }}
 .status-emexecucao {{ background-color: #fb923c; }}
 .status-resolvido {{ background-color: #8b5cf6; }}
 .status-avaliacao {{ background-color: #1d4ed8; }}
-.status-concluido {{ background-color:  #10b981; }}
+.status-concluido {{ background-color: #10b981; }}
 .status-outros {{ background-color: #a3a3a3; }}
-.contador {{
-    font-size: 10px;
-    color: #6b7280;
-    margin-top: 4px;
-    text-align: right;
-}}
-.mes-header {{
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    margin: 16px 0 8px 0;
-    color: #1f2937;
-}}
-.mes-header h2 {{
-    font-size: 20px;
-    margin: 0;
-}}
-.status-superior {{
-    display: flex;
-    justify-content: space-between;
-    width: 94%;
-    max-width: 860px;
-    margin: 0 auto 8px auto;
-    font-size: 12px;
-    color: #6b7280;
-}}
-.legenda-status {{
-    position: fixed;
-    top: 72px;
-    left: 16px;
-    background: rgba(255, 255, 255, 0.95);
-    padding: 10px 12px;
-    border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    font-size: 12px;
-    color: #1f2937;
-    z-index: 1000;
-    max-width: 200px;
-    line-height: 1.5;
-}}
-.rodape {{
-    margin: 30px auto;
-    text-align: center;
-    font-size: 12px;
-    color: #6b7280;
-}}
+.contador {{ font-size: 10px; color: #6b7280; margin-top: 4px; text-align: right; }}
+.mes-header {{ display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 16px 0 8px 0; color: #1f2937; }}
+.mes-header h2 {{ font-size: 20px; margin: 0; }}
+.atualizacao {{ font-size: 12px; color: #6b7280; margin-top: 4px; }}
+.legenda-status {{ position: fixed; top: 72px; left: 16px; background: rgba(255, 255, 255, 0.95); padding: 10px 12px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); font-size: 12px; color: #1f2937; z-index: 1000; max-width: 200px; line-height: 1.5; }}
+.rodape {{ margin: 30px auto; text-align: center; font-size: 12px; color: #6b7280; }}
 </style>
 </head><body>
 <div class='legenda-status'>
@@ -244,22 +169,36 @@ th {{
 </div>
 <div class='mes-header'>
     <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
-</div>
-<div class='status-superior'>
-    <div>Total de mudanças no mês: {total_mes}</div>
-    <div>Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
+    <div class='atualizacao'>Total de mudanças: {len(issues)} | Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}</div>
 </div>
 <table>
-<tr>
-<th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
-</tr>
+<tr><th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th></tr>
 """
 
-# FUNÇÕES AUXILIARES E MONTAGEM DO CALENDÁRIO (continua igual)
+# CALENDÁRIO
+cal = Calendar(firstweekday=0)
+semanas = cal.monthdatescalendar(ano, mes)
+for semana in semanas:
+    html += "<tr>"
+    for dia in semana:
+        if dia.month == mes:
+            eventos = mudancas_por_data.get(dia, [])
+            html += f"<td><div class='data-dia'>{dia.day}</div><div class='item-container'>"
+            for evento in eventos:
+                status = evento["fields"].get("status", {}).get("name", "")
+                cor = cor_status(status)
+                tooltip = gerar_tooltip(evento).replace("\n", "&#10;")
+                html += f"<a href='https://{JIRA_DOMAIN}/browse/{evento['key']}' target='_blank' title='{tooltip}'><div class='item-bar status-{cor}'></div></a>"
+            if eventos:
+                html += f"<div class='contador'>{len(eventos)} mudança(s)</div>"
+            html += "</div></td>"
+        else:
+            html += "<td style='background-color:#f3f4f6;'></td>"
+    html += "</tr>"
 
-# ⬇️ (continue a partir da parte que renderiza os dias da tabela — igual ao seu código anterior)
+html += "</table><div class='rodape'>Mantido pela Gerência de Gestão de Mudanças e Implantações da STI.</div></body></html>"
 
-# SALVAR HTML
+# SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(html)
 
