@@ -2,7 +2,7 @@ import requests
 import base64
 from datetime import datetime, timedelta
 from urllib.parse import quote
-from calendar import monthrange
+from calendar import monthrange, Calendar
 from collections import defaultdict
 import locale
 import os
@@ -11,16 +11,12 @@ from dateutil.parser import parse
 # CONFIGURAÇÕES
 JIRA_USER_EMAIL = "herbert.branco@stf.jus.br"
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
-JIRA_DOMAIN = "stfjira.atlassian.net"
-JQL = 'project = 10323 and status NOT IN (Cancelado)'
-CAMPOS = "summary,customfield_10065,customfield_10088,customfield_10057,customfield_10056,status,assignee"
-
-# VERIFICAÇÃO DO TOKEN
 if not JIRA_API_TOKEN:
     print("❌ JIRA_API_TOKEN não foi carregado.")
     exit(1)
-else:
-    print("✅ Token carregado com sucesso.")
+JIRA_DOMAIN = "stfjira.atlassian.net"
+JQL = 'project = 10323 and status NOT IN (Cancelado)'
+CAMPOS = "summary,customfield_10065,customfield_10067,customfield_10088,customfield_10057,customfield_10056,status,assignee"
 
 # AUTENTICAÇÃO
 auth = base64.b64encode(f"{JIRA_USER_EMAIL}:{JIRA_API_TOKEN}".encode()).decode()
@@ -37,27 +33,27 @@ max_results = 100
 print("⏳ Buscando mudanças no Jira...")
 
 while True:
-    url = (
-        f"https://{JIRA_DOMAIN}/rest/api/3/search"
-        f"?jql={quote(JQL)}"
-        f"&fields={quote(CAMPOS)}"
-        f"&startAt={start_at}"
-        f"&maxResults={max_results}"
-    )
-    response = requests.get(url, headers=headers)
+    url = f"https://{JIRA_DOMAIN}/rest/api/3/search"
+    params = {
+        "jql": JQL,
+        "fields": CAMPOS,
+        "startAt": start_at,
+        "maxResults": max_results
+    }
+    response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
         print(f"❌ Erro na requisição: {response.status_code}")
         print(response.text)
         exit(1)
 
     data = response.json()
-    page_issues = data.get("issues", [])
-    issues.extend(page_issues)
+    batch = data.get("issues", [])
+    issues.extend(batch)
 
-    print(f"📄 Página com {len(page_issues)} mudanças carregadas (startAt={start_at})")
+    print(f"📄 Página com {len(batch)} mudanças carregadas (startAt={start_at})")
 
-    if len(page_issues) < max_results:
-        break  # Última página
+    if len(batch) < max_results:
+        break
     start_at += max_results
 
 print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
@@ -66,7 +62,6 @@ print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
 mudancas_por_data = defaultdict(list)
 for issue in issues:
     start = issue["fields"].get("customfield_10065")
-    print(f"{issue['key']} - Data de início bruta: {start}")
     if isinstance(start, dict):
         start = start.get("value")
     if start:
@@ -76,29 +71,22 @@ for issue in issues:
         except Exception as e:
             print(f"❌ Erro ao interpretar data da issue {issue['key']}: {start} - {e}")
 
-# DEFINIR MÊS CORRENTE
+# DEFINIÇÕES
 hoje = datetime.now() - timedelta(hours=3)
 ano = hoje.year
-mes = hoje.month
 
-# Nome do mês em português
+# LOCALE PT-BR para nome dos meses
 try:
     locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-    nome_mes = datetime(ano, mes, 1).strftime("%B").capitalize()
 except:
-    meses_pt = {
-        1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
-        7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
-    }
-    nome_mes = meses_pt[mes]
+    pass
 
-# Calcular total de mudanças do mês atual
-total_mudancas_mes = 0
-for data_key in mudancas_por_data.keys():
-    if data_key.year == ano and data_key.month == mes:
-        total_mudancas_mes += len(mudancas_por_data[data_key])
+meses_pt = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
+    7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+}
 
-# TOOLTIP
+# TOOLTIP COM DATAS DE INÍCIO E FIM
 def gerar_tooltip(issue):
     key = issue["key"]
     summary = issue["fields"].get("summary", "").replace('"', "'")
@@ -108,10 +96,17 @@ def gerar_tooltip(issue):
     motivo_valor = motivo["value"] if isinstance(motivo, dict) else "Sem motivo"
     unidade = issue["fields"].get("customfield_10056")
     unidade_pai = unidade.get("value") if isinstance(unidade, dict) else "Sem unidade"
-    unidade_filho = unidade.get("child", {}).get("value") if isinstance(unidade, dict) else ""
+    unidade_filho = unidade.get("child", {}).get("value") if isinstance(unidade, dict) and unidade.get("child") else ""
     assignee = issue["fields"].get("assignee")
     responsavel = assignee.get("displayName") if assignee else "Sem responsável"
     status = issue["fields"].get("status", {}).get("name", "Sem status")
+
+    # Datas de início e fim formatadas
+    inicio_raw = issue["fields"].get("customfield_10065")
+    fim_raw = issue["fields"].get("customfield_10067")
+    inicio_fmt = parse(inicio_raw).strftime("%d/%m/%Y %H:%M") if inicio_raw else "Sem data"
+    fim_fmt = parse(fim_raw).strftime("%d/%m/%Y %H:%M") if fim_raw else "Sem data"
+
     return (
         f"{key}\n"
         f"Tipo: {tipo_valor}\n"
@@ -119,12 +114,44 @@ def gerar_tooltip(issue):
         f"Resumo: {summary}\n"
         f"Motivo: {motivo_valor}\n"
         f"Unidade executora: {unidade_pai} / {unidade_filho}\n"
-        f"Responsável: {responsavel}"
+        f"Responsável: {responsavel}\n"
+        f"Início: {inicio_fmt}\n"
+        f"Fim: {fim_fmt}"
     )
 
-# HTML INICIAL - modificado para incluir total e última atualização lado a lado no topo
-html = f"""
-<html><head><meta charset="utf-8">
+# CORES DOS STATUS
+def cor_status(nome):
+    nome = nome.lower()
+    if "aprovação" in nome:
+        return "status-aprovacao"
+    elif "aguardando" in nome:
+        return "status-aguardando"
+    elif "execução" in nome:
+        return "status-emexecucao"
+    elif "resolvido" in nome:
+        return "status-resolvido"
+    elif "avaliação" in nome:
+        return "status-avaliacao"
+    elif "concluído" in nome or "concluido" in nome:
+        return "status-concluido"
+    else:
+        return "status-outros"
+
+# GERAR LINK JQL POR DIA
+def gerar_jql_link(data):
+    data_str = data.strftime("%Y-%m-%d")
+    jql_dia = f'project=10323 AND "Data e hora de início da execução" >= "{data_str}" AND "Data e hora de início da execução" < "{(data + timedelta(days=1)).strftime("%Y-%m-%d")}"'
+    return f"https://{JIRA_DOMAIN}/issues/?jql={quote(jql_dia)}"
+
+# GERAR LINK JQL POR MÊS
+def gerar_jql_link_mes(ano, mes):
+    inicio = datetime(ano, mes, 1).date()
+    ultimo = datetime(ano, mes, monthrange(ano, mes)[1]).date()
+    jql = f'project=10323 AND "Data e hora de início da execução" >= "{inicio}" AND "Data e hora de início da execução" <= "{ultimo}"'
+    return f"https://{JIRA_DOMAIN}/issues/?jql={quote(jql)}"
+
+# HTML INICIAL
+html = f"""<html><head><meta charset="utf-8">
 <title>Calendário de Mudanças</title>
 <style>
 body {{
@@ -189,25 +216,24 @@ th {{
 }}
 .mes-header {{
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    margin: 16px 0 8px 0;
+    margin: 24px 0 12px 0;
     color: #1f2937;
-    max-width: 860px;
-    margin-left: 200px;
 }}
 .mes-header h2 {{
-    font-size: 20px;
+    font-size: 24px;
     margin: 0;
 }}
-.mes-info {{
+.atualizacao {{
     font-size: 12px;
     color: #6b7280;
-    text-align: right;
+    margin-top: 4px;
 }}
 .legenda-status {{
     position: fixed;
-    top: 55px;
+    top: 90px;
     left: 16px;
     background: rgba(255, 255, 255, 0.95);
     padding: 10px 12px;
@@ -219,14 +245,7 @@ th {{
     max-width: 200px;
     line-height: 1.5;
 }}
-.rodape {{
-    margin: 30px auto;
-    text-align: center;
-    font-size: 12px;
-    color: #6b7280;
-}}
-</style>
-</head><body>
+</style></head><body>
 <div class='legenda-status'>
     <strong>Status das Mudanças:</strong><br>
     <span class='item-bar status-aprovacao'></span> Em aprovação<br>
@@ -237,94 +256,62 @@ th {{
     <span class='item-bar status-concluido'></span> Concluído<br>
     <span class='item-bar status-outros'></span> Outros status
 </div>
-<div class='mes-header'>
-    <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
-    <div class='mes-info'>
-        Total de mudanças: <strong>{total_mudancas_mes}</strong><br>
-        Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}
-    </div>
-</div>
-<table>
-<tr>
-<th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
-</tr>
 """
 
-# CALENDÁRIO
-primeiro_dia_semana, total_dias = monthrange(ano, mes)
-primeira_semana_vazia = (primeiro_dia_semana - 0) % 7
-dia = 1
-linha = "<tr>" + "<td></td>" * primeira_semana_vazia
+# GERAR CALENDÁRIOS DE TODOS OS MESES DO ANO
+cal = Calendar(firstweekday=0)  # Segunda-feira = 0
 
-def gerar_jql_link(data):
-    data_str = data.strftime("%Y-%m-%d")
-    jql_dia = f'project=10323 AND "Data e hora de início da execução" >= "{data_str}" AND "Data e hora de início da execução" < "{data_str} 23:59"'
-    return f"https://{JIRA_DOMAIN}/issues/?jql={quote(jql_dia)}"
+for mes in range(1, 13):
+    nome_mes = meses_pt.get(mes, f"Mês {mes}")
+    dias_do_mes = [datetime(ano, mes, d).date() for d in range(1, monthrange(ano, mes)[1] + 1)]
+    total_mes = sum(len(mudancas_por_data.get(d, [])) for d in dias_do_mes)
+    link_mes = gerar_jql_link_mes(ano, mes)
 
-def cor_status(status):
-    status = status.lower()
-    if "aprovação" in status:
-        return "status-aprovacao"
-    elif "aguardando" in status:
-        return "status-aguardando"
-    elif "execução" in status:
-        return "status-emexecucao"
-    elif "resolvido" in status:
-        return "status-resolvido"
-    elif "avaliação" in status:
-        return "status-avaliacao"
-    elif "concluído" in status or "concluido" in status:
-        return "status-concluido"
-    else:
-        return "status-outros"
+    html += f"""
+    <div class='mes-header'>
+        <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
+        <div class='atualizacao'>Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")} |
+        Total de mudanças: <a href="{link_mes}" target="_blank">{total_mes}</a></div>
+    </div>
+    <table><tr>
+    <th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
+    </tr>
+    """
 
-for i in range(primeira_semana_vazia, 7):
-    data_atual = datetime(ano, mes, dia).date()
-    itens = mudancas_por_data.get(data_atual, [])
-    linha += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
-    for item in itens:
-        key = item["key"]
-        status_nome = item["fields"].get("status", {}).get("name", "")
-        cor = cor_status(status_nome)
-        link = f"https://{JIRA_DOMAIN}/browse/{key}"
-        tooltip = gerar_tooltip(item)
-        linha += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
-    linha += "</div>"
-    if itens:
-        jql_link = gerar_jql_link(data_atual)
-        linha += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
-    linha += "</td>"
-    dia += 1
-html += linha + "</tr>\n"
+    for semana in cal.monthdayscalendar(ano, mes):
+        html += "<tr>"
+        for dia in semana:
+            if dia == 0:
+                html += "<td></td>"
+            else:
+                data_atual = datetime(ano, mes, dia).date()
+                itens = mudancas_por_data.get(data_atual, [])
+                html += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
+                for item in itens:
+                    key = item["key"]
+                    status_nome = item["fields"].get("status", {}).get("name", "")
+                    cor = cor_status(status_nome)
+                    link = f"https://{JIRA_DOMAIN}/browse/{key}"
+                    tooltip = gerar_tooltip(item)
+                    html += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
+                html += "</div>"
+                if itens:
+                    jql_link = gerar_jql_link(data_atual)
+                    html += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total: {len(itens)}</a></div>"
+                html += "</td>"
+        html += "</tr>\n"
+    html += "</table>"
 
-while dia <= total_dias:
-    linha = "<tr>"
-    for _ in range(7):
-        if dia > total_dias:
-            linha += "<td></td>"
-        else:
-            data_atual = datetime(ano, mes, dia).date()
-            itens = mudancas_por_data.get(data_atual, [])
-            linha += f"<td><div class='data-dia'>{dia}</div><div class='item-container'>"
-            for item in itens:
-                key = item["key"]
-                status_nome = item["fields"].get("status", {}).get("name", "")
-                cor = cor_status(status_nome)
-                link = f"https://{JIRA_DOMAIN}/browse/{key}"
-                tooltip = gerar_tooltip(item)
-                linha += f"<a href='{link}' target='_blank' title=\"{tooltip}\"><div class='item-bar {cor}'></div></a>"
-            linha += "</div>"
-            if itens:
-                jql_link = gerar_jql_link(data_atual)
-                linha += f"<div class='contador'><a href='{jql_link}' target='_blank'>Total de mudanças: {len(itens)}</a></div>"
-            linha += "</td>"
-        dia += 1
-    html += linha + "</tr>\n"
-
-html += "</table> <div class='rodape'>Mantido pela Gerência de Gestão de Mudanças e Implantações da Secretaria de Tecnologia e Inovação - GMUDI/STI.</div></body></html>"
+# RODAPÉ
+html += """
+<div style="text-align: center; font-size: 12px; color: #718096; margin-top: 24px; padding-bottom: 16px;">
+    Calendário mantido pela Gerência de Gestão de Mudanças e Implantações da Secretaria de Tecnologia e Inovação - GMUDI/STI.
+</div>
+</body></html>
+"""
 
 # SALVAR ARQUIVO
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(html)
 
-print("✅ HTML salvo como index.html")
+print("✅ Calendário atualizado.")
