@@ -32,41 +32,26 @@ headers = {
 # CONSULTA AO JIRA COM PAGINAÇÃO
 issues = []
 start_at = 0
-max_results = 100
-
-print("⏳ Buscando mudanças no Jira...")
-
 while True:
-    url = (
-        f"https://{JIRA_DOMAIN}/rest/api/3/search"
-        f"?jql={quote(JQL)}"
-        f"&fields={quote(CAMPOS)}"
-        f"&startAt={start_at}"
-        f"&maxResults={max_results}"
-    )
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"❌ Erro na requisição: {response.status_code}")
-        print(response.text)
-        exit(1)
-
+    url = f"https://{JIRA_DOMAIN}/rest/api/3/search"
+    params = {
+        "jql": JQL,
+        "fields": CAMPOS,
+        "startAt": start_at,
+        "maxResults": 100
+    }
+    response = requests.get(url, headers=headers, params=params)
     data = response.json()
-    page_issues = data.get("issues", [])
-    issues.extend(page_issues)
-
-    print(f"📄 Página com {len(page_issues)} mudanças carregadas (startAt={start_at})")
-
-    if len(page_issues) < max_results:
-        break  # Última página
-    start_at += max_results
-
-print(f"✅ {len(issues)} mudanças recebidas da API do Jira.")
+    batch = data.get("issues", [])
+    issues.extend(batch)
+    if len(batch) < 100:
+        break
+    start_at += 100
 
 # AGRUPAR MUDANÇAS POR DATA
 mudancas_por_data = defaultdict(list)
 for issue in issues:
     start = issue["fields"].get("customfield_10065")
-    print(f"{issue['key']} - Data de início bruta: {start}")
     if isinstance(start, dict):
         start = start.get("value")
     if start:
@@ -74,7 +59,7 @@ for issue in issues:
             start_dt = parse(start).date()
             mudancas_por_data[start_dt].append(issue)
         except Exception as e:
-            print(f"❌ Erro ao interpretar data da issue {issue['key']}: {start} - {e}")
+            print(f"Erro ao processar data '{start}': {e}")
 
 # DEFINIÇÕES
 hoje = datetime.now() - timedelta(hours=3)
@@ -90,7 +75,6 @@ meses_pt = {
     1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
     7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
-
 
 # TOOLTIP
 def gerar_tooltip(issue):
@@ -313,8 +297,9 @@ html += """
 </body></html>
 """
 
-# SALVAR ARQUIVO
-with open("index.html", "w", encoding="utf-8") as f:
+# SALVAR
+caminho_html = r"index.html"
+with open(caminho_html, "w", encoding="utf-8") as f:
     f.write(html)
 
-print("✅ HTML salvo como index.html")
+print("✅ Calendário atualizado.")
