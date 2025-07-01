@@ -92,12 +92,6 @@ meses_pt = {
 }
 
 
-# Calcular total de mudanças do mês atual
-total_mudancas_mes = 0
-for data_key in mudancas_por_data.keys():
-    if data_key.year == ano and data_key.month == mes:
-        total_mudancas_mes += len(mudancas_por_data[data_key])
-
 # TOOLTIP
 def gerar_tooltip(issue):
     key = issue["key"]
