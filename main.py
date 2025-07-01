@@ -154,9 +154,8 @@ def gerar_jql_link_mes(ano, mes):
     jql = f'project=10323 AND "Data e hora de início da execução" >= "{inicio}" AND "Data e hora de início da execução" <= "{ultimo}"'
     return f"https://{JIRA_DOMAIN}/issues/?jql={quote(jql)}"
 
-# HTML INICIAL - modificado para incluir total e última atualização lado a lado no topo
-html = f"""
-<html><head><meta charset="utf-8">
+# HTML INICIAL
+html = f"""<html><head><meta charset="utf-8">
 <title>Calendário de Mudanças</title>
 <style>
 body {{
@@ -221,25 +220,24 @@ th {{
 }}
 .mes-header {{
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    margin: 16px 0 8px 0;
+    margin: 24px 0 12px 0;
     color: #1f2937;
-    max-width: 860px;
-    margin-left: 200px;
 }}
 .mes-header h2 {{
-    font-size: 20px;
+    font-size: 24px;
     margin: 0;
 }}
-.mes-info {{
+.atualizacao {{
     font-size: 12px;
     color: #6b7280;
-    text-align: right;
+    margin-top: 4px;
 }}
 .legenda-status {{
     position: fixed;
-    top: 55px;
+    top: 90px;
     left: 16px;
     background: rgba(255, 255, 255, 0.95);
     padding: 10px 12px;
@@ -251,14 +249,7 @@ th {{
     max-width: 200px;
     line-height: 1.5;
 }}
-.rodape {{
-    margin: 30px auto;
-    text-align: center;
-    font-size: 12px;
-    color: #6b7280;
-}}
-</style>
-</head><body>
+</style></head><body>
 <div class='legenda-status'>
     <strong>Status das Mudanças:</strong><br>
     <span class='item-bar status-aprovacao'></span> Em aprovação<br>
@@ -269,17 +260,6 @@ th {{
     <span class='item-bar status-concluido'></span> Concluído<br>
     <span class='item-bar status-outros'></span> Outros status
 </div>
-<div class='mes-header'>
-    <h2>Calendário de Mudanças - {nome_mes} {ano}</h2>
-    <div class='mes-info'>
-        Total de mudanças: <strong>{total_mudancas_mes}</strong><br>
-        Última atualização: {hoje.strftime("%d/%m/%Y %H:%M:%S")}
-    </div>
-</div>
-<table>
-<tr>
-<th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
-</tr>
 """
 
 # GERAR CALENDÁRIOS DE TODOS OS MESES DO ANO
