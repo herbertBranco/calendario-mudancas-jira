@@ -7,6 +7,7 @@ from collections import defaultdict
 import locale
 import os
 from dateutil.parser import parse
+from html import escape
 
 # CONFIGURAÇÕES
 JIRA_USER_EMAIL = "herbert.branco@stf.jus.br"
