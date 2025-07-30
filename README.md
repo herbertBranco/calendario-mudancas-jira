@@ -84,7 +84,7 @@ pip install requests python-dateutil
 
 - Os horários são ajustados para o fuso de Brasília (UTC-3) diretamente no script.
 - Os status das mudanças são interpretados por nome e categorizados por cor.
-- O calendário exibe apenas o mês atual.
+- O calendário exibe apenas o ano corrente.
 - Links diretos por dia levam a um filtro JQL dinâmico no Jira.
 
 ---
